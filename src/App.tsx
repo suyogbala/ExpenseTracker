@@ -1,4 +1,5 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect } from "react";
+import type { FormEvent } from "react";
 import {
   Authenticator,
   Button,
@@ -16,12 +17,14 @@ import { generateClient } from "aws-amplify/data";
 import outputs from "../amplify_outputs.json";
 import type { Schema } from "../amplify/data/resource";
 
-// TypeScript type for Expense
+// TypeScript type for Expense with nullable fields to match backend
 interface Expense {
-  id?: string;
+  id: string;
   name: string;
   amount: number;
-  owner?: string;
+  owner?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Configure Amplify
@@ -36,9 +39,22 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   useEffect(() => {
+    // Subscribe to real-time updates
     const subscription = client.models.Expense.observeQuery().subscribe({
-      next: (data) => setExpenses([...data.items]),
+      next: (data) => {
+        // Map nullable backend fields to non-nullable frontend types
+        const sanitized = data.items.map((item) => ({
+          id: item.id,
+          name: item.name ?? "",
+          amount: item.amount ?? 0,
+          owner: item.owner ?? null,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        }));
+        setExpenses(sanitized);
+      },
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -69,6 +85,7 @@ export default function App() {
           margin="0 auto"
         >
           <Heading level={1}>Expense Tracker</Heading>
+
           <View as="form" margin="3rem 0" onSubmit={createExpense}>
             <Flex direction="column" justifyContent="center" gap="2rem" padding="2rem">
               <TextField
@@ -93,12 +110,15 @@ export default function App() {
               </Button>
             </Flex>
           </View>
+
           <Divider />
+
           <Heading level={2}>Expenses</Heading>
+
           <Grid margin="3rem 0" autoFlow="column" justifyContent="center" gap="2rem" alignContent="center">
             {expenses.map((expense) => (
               <Flex
-                key={expense.id || expense.name}
+                key={expense.id}
                 direction="column"
                 justifyContent="center"
                 alignItems="center"
@@ -113,11 +133,12 @@ export default function App() {
                 </View>
                 <Text fontStyle="italic">${expense.amount}</Text>
                 <Button variation="destructive" onClick={() => deleteExpense(expense)}>
-                  Delete note
+                  Delete
                 </Button>
               </Flex>
             ))}
           </Grid>
+
           <Button onClick={signOut}>Sign Out</Button>
         </Flex>
       )}
